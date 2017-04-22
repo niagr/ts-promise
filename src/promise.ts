@@ -1,5 +1,10 @@
-type ResultFunction<T> = (result?: T) => void
+type ResolveFunction<T> = (result?: T) => void
 type RejectFunction = (error: Error) => void
+type ThenHandlerReturnType<U> = U|PromiseNishant<U>|undefined
+type ThenSuccessHandler<T, U> = (res?: T) => ThenHandlerReturnType<U>
+type ThenFailureHandler<U> = (error?: Error) => ThenHandlerReturnType<U>
+type ThenSuccessOrFailureHandler<T, U> = (result?: T|Error) => ThenHandlerReturnType<U>
+
 
 export default class PromiseNishant<T> {
 
@@ -10,7 +15,7 @@ export default class PromiseNishant<T> {
     private doneFailure?: (error?: Error) => void
 
 
-    constructor (func: (resolve: ResultFunction<T>, reject: RejectFunction) => void) {
+    constructor (func: (resolve: ResolveFunction<T>, reject: RejectFunction) => void) {
         func(res => this.resolve(res), err => this.reject(err))
     }
 
@@ -39,7 +44,7 @@ export default class PromiseNishant<T> {
         this.process()
     }
 
-    thenHelper<U>(resolve, reject, func: (result?: T|Error) => U|PromiseNishant<U>, res?: T|Error) {
+    private thenHelper<U>(resolve: ResolveFunction<U>, reject: RejectFunction, func: ThenSuccessOrFailureHandler<T,U>, res?: T|Error) {
         let ret: U | PromiseNishant<U> | undefined = undefined;
         try {
             ret = func(res)
@@ -53,11 +58,13 @@ export default class PromiseNishant<T> {
             resolve(ret)
     }
 
-    then<U> (success?: (result?: T) => U|PromiseNishant<U>, failure?: (error?: Error) => U|PromiseNishant<U>): PromiseNishant<U> {
+    then<U> (success?: ThenSuccessHandler<T, U>, failure?: ThenFailureHandler<U>): PromiseNishant<U> {
         return new PromiseNishant<U>((resolve, reject) => {
+            const defaultSuccessHandler: ThenSuccessHandler<T, T> = res => res
+            const defaultFailureHandler: ThenFailureHandler<undefined> = err => {throw err}
             this.done(
-                res => success && this.thenHelper(resolve, reject, success, res || undefined), 
-                err => failure && this.thenHelper(resolve, reject, failure, err)
+                res => this.thenHelper<T|U>(resolve, reject, success || defaultSuccessHandler, res), 
+                err => this.thenHelper(resolve, reject, failure || defaultFailureHandler, err)
             )
         })
     }
